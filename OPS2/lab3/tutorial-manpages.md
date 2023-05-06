@@ -249,3 +249,5 @@ int FD_ISSET(int fd, fd_set *fdset);
 void FD_SET(int fd, fd_set *fdset);
 void FD_ZERO(fd_set *fdset);
 ```
+
+https://manpages.debian.org/stretch/manpages-pl-dev/FD_ZERO.3.pl.html

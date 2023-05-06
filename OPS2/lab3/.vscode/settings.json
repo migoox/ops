@@ -2,6 +2,11 @@
     "C_Cpp.errorSquiggles": "enabled",
     "files.associations": {
         "socket.h": "c",
-        "un.h": "c"
+        "un.h": "c",
+        "stdlib.h": "c",
+        "stdio.h": "c",
+        "signal.h": "c",
+        "in.h": "c",
+        "mysocklib.h": "c"
     }
 }
