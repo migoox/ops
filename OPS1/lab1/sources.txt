@@ -1,0 +1,10 @@
+gcc and make tutorial:
+    https://sop.mini.pw.edu.pl/pl/sop1/lab/l1/tutorial.gcc_make.txt
+
+lab1 tutorial:
+    https://sop.mini.pw.edu.pl/pl/sop1/lab/l1/
+
+cwiczenie:
+    https://sop.mini.pw.edu.pl/pl/sop1/lab/l1-example/
+
+ctrl + shift + v - markdown

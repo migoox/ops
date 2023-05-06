@@ -1,0 +1,9 @@
+First we have to compile all .c files 
+
+$: gcc -Wall -Os -pedantic -c hello.c -o hello.o
+$: gcc -Wall -Os -pedantic -c main.c -o main.o
+
+Then we link those files to create executable 
+I've decided to use static linkig
+
+$: gcc -o my_program hello.c hello.o main.o -static

@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "wait.h": "c",
+        "stdio.h": "c",
+        "signal.h": "c",
+        "random": "c",
+        "algorithm": "c",
+        "time.h": "c",
+        "unistd.h": "c",
+        "queue": "c",
+        "stack": "c"
+    }
+}
