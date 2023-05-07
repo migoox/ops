@@ -20,24 +20,33 @@ void print_answer(int32_t data[5]);
 
 int main(int argc, char** argv)
 {
-	int fd;
+	int clientfd;
 	int32_t data[5];
+
 	if (argc != 5) {
 		usage(argv[0]);
 		return EXIT_FAILURE;
 	}
+
 	if (sethandler(SIG_IGN, SIGPIPE))
 		ERR("Seting SIGPIPE:");
-	fd = connect_socket(argv[1], AF_UNIX, SOCK_STREAM);
+
+	clientfd = LOCAL_connect_socket(argv[1], SOCK_STREAM);
+
 	prepare_request(argv, data);
-	/* Broken PIPE is treated as critical error here */
-	if (bulk_write(fd, (char *)data, sizeof(int32_t[5])) < 0)
+
+	// broken PIPE is treated as critical error here (server is not available)
+	if (bulk_write(clientfd, (char *)data, sizeof(int32_t[5])) < 0)
 		ERR("write:");
-	if (bulk_read(fd, (char *)data, sizeof(int32_t[5])) < (int)sizeof(int32_t[5]))
+
+	if (bulk_read(clientfd, (char *)data, sizeof(int32_t[5])) < (int)sizeof(int32_t[5]))
 		ERR("read:");
+
 	print_answer(data);
-	if (TEMP_FAILURE_RETRY(close(fd)) < 0)
+
+	if (TEMP_FAILURE_RETRY(close(clientfd)) < 0)
 		ERR("close");
+
 	return EXIT_SUCCESS;
 }
 

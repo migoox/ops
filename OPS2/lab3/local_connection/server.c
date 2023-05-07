@@ -37,7 +37,7 @@ int main(int argc, char **argv)
     if (sethandler(sigint_handler, SIGINT))
         ERR("setting SIGINT");
 
-    int serverfd_local = bind_socket(argv[1], AF_UNIX, SOCK_STREAM, BACKLOG);
+    int serverfd_local = LOCAL_bind_socket(argv[1], SOCK_STREAM, BACKLOG);
 
     // get current flags for the serverfd and add O_NONBLOCK and set new flags
     // F_GETFL, F_SETFL - status flags and file access modes (man 3p fcntl)
@@ -56,15 +56,21 @@ int main(int argc, char **argv)
 
 void do_server(int serverfd_local)
 {
+    // man select: Upon return, each of the file descriptor sets is modified in place to
+    // indicate which file descriptors are currently "ready". Thus, if using  select()
+    // within a loop, the sets must be reinitialized before each call.
+
     const ssize_t data_size = sizeof(int32_t[5]);
     
     int clientfd;
     ssize_t size;
     int32_t data[5];
-    fd_set base_rfds, rfds;
+    fd_set base_rfds;
 
-    // 
+    // initalize teh set
     FD_ZERO(&base_rfds);
+
+    // add socket of the server to the mask
     FD_SET(serverfd_local, &base_rfds);
 
     // ignore SIGINT if pselect is not running
@@ -73,22 +79,25 @@ void do_server(int serverfd_local)
     sigaddset(&mask, SIGINT);
 	sigprocmask(SIG_BLOCK, &mask, &oldmask);
 
-
     while (do_work) {
-        rfds = base_rfds;
-        // pselect unlocks the SIGINT
-        // 
+        fd_set rfds = base_rfds;
+        // wait for serverfd_local being ready to read 
         if (pselect(serverfd_local + 1, &rfds, NULL, NULL, NULL, &oldmask) > 0) {
-            if ((clientfd = add_new_client(serverfd_local)) >= 0) {
+            // since serverfd_local is ready to read, there must be a client waiting for accept in the listen queue
+            if ((clientfd = LOCAL_add_new_client(serverfd_local)) >= 0) {
+                
+                // read from the client
                 if ((size = bulk_read(clientfd, (char *)data, data_size)) < 0)
                     ERR("read error");    
                 
+                // calculate and give the answer
                 if (size == data_size) {
                     calculate(data);
                     if (bulk_write(clientfd, (char *)data, data_size) < 0)
                         ERR("write error");
                 }
 
+                // close the client
                 if (TEMP_FAILURE_RETRY(close(clientfd)) < 0)
 					ERR("close");
             }

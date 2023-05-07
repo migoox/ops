@@ -7,19 +7,27 @@
 
 int sethandler(void (*f)(int), int sig_no);
 
-int make_socket_UNIX(char* name, int type, struct sockaddr_un *addr);
-
-int make_socket_INET(char* name, int type, struct sockaddr_un *addr);
+int LOCAL_make_socket(char* name, int type, struct sockaddr_un *addr);
 
 // makes socket, binds it and starts listening for the connections
-int bind_socket(char* name, int socket_family, int type, int backlog);
+int LOCAL_bind_socket(char* name, int type, int backlog);
 
 // returns client fd on success, or -1 if there is no connection (nonblock)
 // if serverfd is set to blocking, this function will block and -1 won't be 
 // ever returned
-int add_new_client(int serverfd);
+int LOCAL_add_new_client(int serverfd);
 
-int connect_socket(char *name, int socket_family, int type);
+// makes socket, and connects it 
+int LOCAL_connect_socket(char *name, int type);
+
+
+int TCP_IPv4_make_socket(char* name, int type, struct sockaddr_un *addr);
+
+int TCP_IPv4_bind_socket(char* name, int type, int backlog);
+
+int TCP_IPv4_add_new_client(int serverfd);
+
+int TCP_IPv4_connect_socket(char *name, int type);
 
 // signal-resistant reading, if the reading is interrupted
 // by the signal, it will retry reading.

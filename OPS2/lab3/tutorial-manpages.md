@@ -101,6 +101,57 @@ Wszystkie główne parametry służące do networkingu są dostęne przez pliki 
 #### Ioctls
 Umożliwia skonfigurowanie socketu, man 7 socket - wszystkie opcje.
 
+## Opcje gniazd
+**Manpages:** man 3p getsockopt, man 3p setsockopt, man 3p fcntl, man 3p ioctl
+```c
+#include <sys/types.h>
+#include <sys/socket.h>
+
+int getsockopt(int sockfd, int level, int optname,
+              void *optval, socklen_t *optlen);
+int setsockopt(int sockfd, int level, int optname,
+              const void *optval, socklen_t optlen);
+// sockfd - deskryptor gniazda, którego ustawienia chcemy zmienić/sprawdzić
+// level - określa warstwę API, która ma interpretować opcję np. SOL_SOCKET
+// optname - nazwa opcji, więcej na man 7 socket -> Socket options
+// optval - adres wartości, którą chcemy ustawić dla opcji o nazwie "optname"
+// otplen - rozmiar przypisywanej wartości (getscokopt będzie ucinać optval w przypadku kiedy wartość pod adresem optlen jest za mała)
+```
+
+Umożliwiają zmianę zachowania socketa o deskryptorze "sockfd". Można je ustawiać z różnych warstw stosu protokołów. Najwyższa warstwa to `SOL_SOCKET`. 
+
+Przykładowo poniższy kod pozyskuje i czyści oczekujący błąd gniazda. (opcja SO_ERROR jest tylko do odczytu)
+
+```c
+int status;
+socklen_t size = sizeof(int);
+if (0 != status)
+  ERR("mysocklib: connect() error");
+```
+
+Uwaga: funkcje fcntl() i ioctl() również umożliwiają zmianę zachowania gniazd
+(np. obsługa bez blokowania) 
+- `setsockopt()` - służy do ustawiania opcji gniazda (zaczynają się od SO_...),
+- `fcntl()` - służy do wykonywania operacji na deskryptorach plików, w szczególności na deskryptorach gniazd (ustawienia zaczynają się od O_...), pozwala np. na ustawienie `O_NONBLOCK`, czy też `O_APPEND`,
+- `ioctl()` - pozwala np. na zapytanie ile danych oczekuje na odczyt.
+
+#### Opcje w warstwie SOL_SOCKET
+Warstwa `SOL_SOCKET` to najwyższa warstwa.
+
+<p align="center">
+  <img src="images/so_table.png" width="500" />
+</p>
+
+Bardzo częstą opcją jest `SO_BROADCAST`, który pozwala wywyłać datagramy na adresy rozgłoszeniowe (inaczej datagramy UDP nie będą mogły być wysłane na broadcast, częsty błąd).
+
+Kolejną ważną opcją jest `SO_KEEPALIVE` dla połączenia TCP, która mówi, że żądamy od gniazda, które jest w stanie połączonym, aby okresowo były nadawane telegramy KEEPALIVE do diagnostyki, czy połączenie nadal jest aktywne (normalnie, jeśli dwa połączone przez TCP urządzenia nie mają nic do wysłania, nic nie wiemy o tym czy są ze sobą połączone).
+
+#### Opcje w warstwie IPPROTO_TCP
+ 
+<p align="center">
+  <img src="images/so_table_ipproto.png" width="500" />
+</p>
+
 ## Lokalna komunikacja między procesowa z użyciem socketów
 **Manpages:** man 7 unix
 ```c
@@ -188,7 +239,20 @@ int listen(int socket, int backlog);
 // zwraca 0 w przypadku powodzenia, -1 wpp
 ```
 
-Funkcja `listen()` oznacza gniazdo wskazane przez argument "socket", jako akceptujące połączenia. Czasami `listen()` potrzebuje odpowiednik uprawnień.
+Funkcja `listen()` oznacza gniazdo wskazane przez argument "socket", jako akceptujące połączenia. Czasami `listen()` potrzebuje odpowiednich uprawnień.
+
+Aby sprawdzić, czy gniazdo jest w stanie listen, można użyć poniższej komendy w bashu.
+
+```bash
+# dla lokalnych gniazd (x - unix, l - listen)
+$ ss -xl | grep <nazwa_gniazda>
+
+# dla gniazd tcp (t - tcp, l - listen)
+$ ss -tl | grep <nazwa_gniazda>
+
+# dla gniazd udp (u - udp, l - listen)
+$ ss -ul | grep <nazwa_gniazda>
+```
 
 ## Nawiązywanie połączenia
 **Manpages:** man 3p connect
@@ -206,11 +270,13 @@ int connect(int socket, const struct sockaddr *address,
 
 Funkcja `connect()` wykona próbę połączenia, jeśli socket jest ustawiony na connection-mode lub zresetuje adres docelowego socketa w connectionless-mode.
 
-Jeżeli socket nie został przypisay do żadnego adresu lokalnego, `connect()` powinien zbindować ten socket do odpowiedniego nieużywanego loklanego adresu, chyba ze operujemy na przestrzeni nazw `AF_UNIX`.
+Jeżeli socket nie został przypisay do żadnego adresu lokalnego, `connect()` powinien zbindować ten socket do odpowiedniego nieużywanego lokalnego adresu, chyba ze operujemy na przestrzeni nazw `AF_UNIX`.
 
-Analogicznie do `bind()`, jeżeli połączenie nie może zostać ustanowione, oraz O_NONBLOCK, połączenie będzie wykonywane asynchronicznie. 
+Analogicznie do `bind()`, jeżeli połączenie nie może zostać ustanowione, oraz O_NONBLOCK jest ustawiony, połączenie będzie wykonywane asynchronicznie. 
 
 W trybie nieblokującym, jeżeli nastąpi przerwanie sygnałem, to `errno=EINTR`, ale request wciąż będzie wykonywany asynchronicznie.
+
+Nie możemy ponownie wywołać `connect()` w celu sprawdzenia, czy połączenie zostało już nawiązane.
 
 ## Akceptacja połączenia
 **Manpages:** man 3p accept
@@ -250,4 +316,13 @@ void FD_SET(int fd, fd_set *fdset);
 void FD_ZERO(fd_set *fdset);
 ```
 
-https://manpages.debian.org/stretch/manpages-pl-dev/FD_ZERO.3.pl.html
+Funkcje `pselect()` oraz `select()`, różnią się tylko tym, że `pselect()` umożliwia tymczasowe ustawienie maski sygnałów blokowanych,
+co może być użyteczne, kiedy oczekujemy na jakiś sygnał przerywający działanie serwera.
+
+Funkcja `select()` będzie blokowała proces/wątek, do momentu, w którym istnieje element w jednym ze zdefiniowanych wcześniej zbiorów, 
+gotowy do wykonania operacji I/O. Poprzez gotowy roumiemy możliwość przeprowadzenia operacji I/O bez konieczności blokowania.
+
+Argument "nfds" określa zakres deskryptorów, które mają zostać zbadane. Zakres ten jest postaci [0, nfds - 1]. Oznacza to, że w przypadku kiedy deskrtypor 
+należący do jakiegoś zbioru, jest większy niż nfds - 1, to nawet jeśli jest gotowy, `select()`, będzie go pomijał. 
+
+Uwaga: po tym jak jakiś element zostanie oznaczony jako gotowy, `select()` wyrzuci go ze zbioru.

@@ -19,7 +19,7 @@ int sethandler(void (*f)(int), int sig_no)
 	return 0;
 }
 
-int make_socket_UNIX(char* name, int type, struct sockaddr_un *addr)
+int LOCAL_make_socket(char* name, int type, struct sockaddr_un *addr)
 {
     int socketfd;
     if ((socketfd = socket(AF_UNIX, type, 0)) < 0)
@@ -37,21 +37,7 @@ int make_socket_UNIX(char* name, int type, struct sockaddr_un *addr)
     return socketfd;
 }
 
-int make_socket_INET(char* name, int type, struct sockaddr_un *addr)
-{
-    int socketfd;
-    if ((socketfd = socket(AF_INET, type, 0)) < 0)
-        ERR("mysocklib: socket() error");
-
-    // zero the structure
-    memset(addr, 0, sizeof(struct sockaddr_un));
-
-    // TO DO
-
-    return socketfd;
-}
-
-int bind_socket(char* name, int socket_family, int type, int backlog)
+int LOCAL_bind_socket(char* name, int type, int backlog)
 {
     struct sockaddr_un addr;
     int socketfd;
@@ -61,13 +47,7 @@ int bind_socket(char* name, int socket_family, int type, int backlog)
     if (unlink(name) < 0 && errno != ENOENT)
         ERR("mysocklib: bind() error");
     
-    // chooose the correct family
-    if (socket_family == AF_UNIX)
-        socketfd = make_socket_UNIX(name, type, &addr);
-    else if (socket_family == AF_INET)
-        socketfd = make_socket_INET(name, type, &addr);
-    else
-        ERR("mysocklib: socket_family not supported");
+    socketfd = LOCAL_make_socket(name, type, &addr);
 
     // bind the socket
     if (bind(socketfd, (struct sockaddr *)&addr, SUN_LEN(&addr)) < 0)
@@ -80,7 +60,7 @@ int bind_socket(char* name, int socket_family, int type, int backlog)
     return socketfd;
 }
 
-int add_new_client(int serverfd)
+int LOCAL_add_new_client(int serverfd)
 {
     int clientfd;
 
@@ -99,33 +79,41 @@ int add_new_client(int serverfd)
     return clientfd;
 }
 
-int connect_socket(char *name, int socket_family, int type)
+int LOCAL_connect_socket(char *name, int type)
 {
 	struct sockaddr_un addr;
 	int socketfd;
 
-    if (socket_family == AF_UNIX)
-	    socketfd = make_socket_UNIX(name, type, &addr);
-    else if (socket_family == AF_INET)
-        socketfd = make_socket_INET(name, type, &addr);
-    else
-        ERR("mysocklib: socket family not supported");
+	socketfd = LOCAL_make_socket(name, type, &addr);
 
-if (connect(socketfd, (struct sockaddr *)&addr, SUN_LEN(&addr)) < 0) {
-		if (errno != EINTR)
-			ERR("connect");
-		else {
-			fd_set wfds;
+    // add this client socket to the listen queue, may run asynchronously
+    if (connect(socketfd, (struct sockaddr *)&addr, SUN_LEN(&addr)) < 0) {
+		if (EINTR != errno) {
+			ERR("mysocklib: connect() error");
+		} else {
+			fd_set write_fd_set;
 			int status;
 			socklen_t size = sizeof(int);
-			FD_ZERO(&wfds);
-			FD_SET(socketfd, &wfds);
-			if (TEMP_FAILURE_RETRY(select(socketfd + 1, NULL, &wfds, NULL, NULL)) < 0)
-				ERR("select");
+
+            // initialize the set
+			FD_ZERO(&write_fd_set);
+
+            // add socketfd to the set of descriptors that we will be wating for
+			FD_SET(socketfd, &write_fd_set);
+
+            // we need to wait for the server to accept this connection, so we have to monitor if socketfd inlcuded int write_fd_set is ready
+            // MANPAGE: A file descriptor is considered ready if it is
+            // possible to perform a corresponding I/O operation (e.g., read(2), or a sufficiently small write(2)) without blocking.
+			if (TEMP_FAILURE_RETRY(select(socketfd + 1, NULL, &write_fd_set, NULL, NULL)) < 0)
+				ERR("mysocklib: select() error");
+
+            // get status of the socket to indicate whether an error occured
 			if (getsockopt(socketfd, SOL_SOCKET, SO_ERROR, &status, &size) < 0)
-				ERR("getsockopt");
+				ERR("mysocklib: getsockopt() error");
+
+            // check if error occured
 			if (0 != status)
-				ERR("connect");
+				ERR("mysocklib: connect() error");
 		}
 	}
 	return socketfd;
@@ -175,4 +163,25 @@ ssize_t bulk_write(int fd, char *buf, size_t count)
     } while(count > 0);
     
     return len;
+}
+
+
+int TCP_IPv4_make_socket(char* name, int type, struct sockaddr_un *addr)
+{
+    return -1;
+}
+
+int TCP_IPv4_bind_socket(char* name, int type, int backlog)
+{
+    return -1;
+}
+
+int TCP_IPv4_add_new_client(int serverfd)
+{
+    return -1;
+}
+
+int TCP_IPv4_connect_socket(char *name, int type)
+{
+    return -1;
 }
