@@ -87,6 +87,8 @@ int LOCAL_connect_socket(char *name, int type)
 	socketfd = LOCAL_make_socket(name, type, &addr);
 
     // add this client socket to the listen queue, may run asynchronously
+    // sizeof would return bigger value than SUN_LEN (includes bytes of the gaps), 
+    // but sizeof isn't considered as a mistake
     if (connect(socketfd, (struct sockaddr *)&addr, SUN_LEN(&addr)) < 0) {
 		if (EINTR != errno) {
 			ERR("mysocklib: connect() error");
@@ -101,9 +103,12 @@ int LOCAL_connect_socket(char *name, int type)
             // add socketfd to the set of descriptors that we will be wating for
 			FD_SET(socketfd, &write_fd_set);
 
-            // we need to wait for the server to accept this connection, so we have to monitor if socketfd inlcuded int write_fd_set is ready
+            // we need to wait for the server to accept this connection (connect() may run async, for example if it 
+            // is interrupted by the signal), so we have to monitor if socketfd inlcuded int write_fd_set is ready
             // MANPAGE: A file descriptor is considered ready if it is
             // possible to perform a corresponding I/O operation (e.g., read(2), or a sufficiently small write(2)) without blocking.
+            // in the case of an error, pselect also returns.
+            // we use select in both blocking and non-blocking states
 			if (TEMP_FAILURE_RETRY(select(socketfd + 1, NULL, &write_fd_set, NULL, NULL)) < 0)
 				ERR("mysocklib: select() error");
 
@@ -119,48 +124,60 @@ int LOCAL_connect_socket(char *name, int type)
 	return socketfd;
 }
 
+// works with both - blocking and non-blocking states 
 ssize_t bulk_read(int fd, char *buf, size_t count)
 {
     int read_result;
+    fd_set base_rfds; 
+    FD_ZERO(&base_rfds);
+    FD_SET(fd, &base_rfds);
+
     size_t len = 0;
 
-    do {
-        read_result = TEMP_FAILURE_RETRY(read(fd, buf, count));
+    while (count > 0) {
+        fd_set rfds = base_rfds;
 
+        if (TEMP_FAILURE_RETRY(select(fd + 1, &rfds, NULL, NULL, NULL)) < 0)
+				ERR("mysocklib: select() error");
+
+        read_result = TEMP_FAILURE_RETRY(read(fd, buf, count));
         if (read_result < 0)
             ERR("mysocklib: read() error");
-        
-        // if there was nothing to read
-        if (0 == read_result)
-            return len;
-
+    
         // move pointer
         buf += read_result;
         len += read_result;
-
         count -= read_result;
-    } while(count > 0);
+    } 
     
     return len;
 }
 
+// works with both - blocking and non-blocking states 
 ssize_t bulk_write(int fd, char *buf, size_t count)
 {
     int write_result;
+    fd_set base_wfds; 
+    FD_ZERO(&base_wfds);
+    FD_SET(fd, &base_wfds);
+
     size_t len = 0;
     
-    do {
-        write_result = TEMP_FAILURE_RETRY(write(fd, buf, count));
+    while (count > 0) {
+        fd_set wfds = base_wfds;
 
+        if (TEMP_FAILURE_RETRY(select(fd + 1, NULL, &wfds, NULL, NULL)) < 0)
+				ERR("mysocklib: select() error");
+
+        write_result = TEMP_FAILURE_RETRY(write(fd, buf, count));
         if (write_result < 0)
-            ERR("mysocklib: read() error");
+            ERR("mysocklib: write() error");
     
         // move pointer
         buf += write_result;
         len += write_result;
-
         count -= write_result;
-    } while(count > 0);
+    } 
     
     return len;
 }
