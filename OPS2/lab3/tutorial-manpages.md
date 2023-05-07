@@ -330,3 +330,11 @@ Możliwe są 3 typy adresu `struct sockaddr_un`:
 
 ## Komunikacja z użyciem TCP
 **Manpages:** man 7 tcp
+
+
+## Komunikacja z użyciem UDP
+**Manpages:** man 7 udp
+
+Datagramy mogą być wysyłane natychmiast przy użyciu `sendto()` lub `sendmsg()` z poprawnym adresem docelowym jako argumentem. 
+
+Kiedy `connect()` jest wywoływane na gnieździe, ustawiany jest domyślny adres docelowy i datagramy mogą być wysyłane przy pomocy `send()` lub `write()` bez podawania adresu docelowego.

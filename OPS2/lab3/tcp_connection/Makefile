@@ -27,7 +27,7 @@ $(OBJ_DIR):
 .PHONY: clean cleanobj
 
 cleanobj:
-	rm -f $(OBJS_SERVER) $(OBJS_CLIENT)
+	rm -rf $(OBJ_DIR)
 
 clean:
 	rm -f $(OBJS_SERVER) $(OBJS_CLIENT) server client

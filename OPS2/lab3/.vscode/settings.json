@@ -9,6 +9,7 @@
         "in.h": "c",
         "mysocklib.h": "c",
         "stdint.h": "c",
-        "typeinfo": "c"
+        "typeinfo": "c",
+        "netdb.h": "c"
     }
 }

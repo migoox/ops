@@ -132,10 +132,11 @@ int TCP_IPv4_bind_socket(uint16_t port, int backlog)
     // set the structure
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
+    // 0.0.0.0 address
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    // For AF_INET  sockets this means that a socket may bind, except when 
-    // there is an active listening socket bound to the address.
+    // without this option, system blocks access to the port for few minutes
+    // we won't receive any remains from the previous connection on tcp (on upd we would receive them)
     if (setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &status, sizeof(status)))
         ERR("mysocklib: setsockopt() error");
     
@@ -192,6 +193,42 @@ int TCP_IPv4_connect_socket(char *name, char *port)
     return socketfd;
 }
 
+int UDP_IPv4_make_socket(void)
+{
+    int socketfd;
+    if ((socketfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+        ERR("mysocklib: socket() error");
+
+    return socketfd;
+}
+
+int UDP_IPv4_bind_socket(uint16_t port)
+{
+    struct sockaddr_in addr;
+	int socketfd, status = 1;
+
+    socketfd = UDP_IPv4_make_socket();
+
+    // zero the structure
+    memset(&addr, 0, sizeof(struct sockaddr_in));
+
+    // set the structure
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    // 0.0.0.0 address
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    // without this option, system blocks access to the port for few minutes
+    // we won't receive any remains from the previous connection on tcp (on upd we would receive them)
+    if (setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &status, sizeof(status)))
+        ERR("mysocklib: setsockopt() error");
+    
+    if (bind(socketfd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+        ERR("mysocklib: bind() error");
+
+    return socketfd;
+}
+
 int add_new_client(int serverfd)
 {
     int clientfd;
@@ -221,21 +258,27 @@ ssize_t bulk_read(int fd, char *buf, size_t count)
 
     size_t len = 0;
 
-    while (count > 0) {
+    do {
         fd_set rfds = base_rfds;
 
+        // required for a non-blocking state, select waits until the file is ready 
+        // to perform read/write without blocking
         if (TEMP_FAILURE_RETRY(select(fd + 1, &rfds, NULL, NULL, NULL)) < 0)
 				ERR("mysocklib: select() error");
 
         read_result = TEMP_FAILURE_RETRY(read(fd, buf, count));
         if (read_result < 0)
             ERR("mysocklib: read() error");
-    
+
+        // handle end of file
+        if (0 == read_result)
+            return len;
+
         // move pointer
         buf += read_result;
         len += read_result;
         count -= read_result;
-    } 
+    } while (count > 0);
     
     return len;
 }
@@ -250,21 +293,23 @@ ssize_t bulk_write(int fd, char *buf, size_t count)
 
     size_t len = 0;
     
-    while (count > 0) {
+    do {
         fd_set wfds = base_wfds;
 
+        // required for a non-blocking state, select waits until the file is ready 
+        // to perform read/write without blocking
         if (TEMP_FAILURE_RETRY(select(fd + 1, NULL, &wfds, NULL, NULL)) < 0)
 				ERR("mysocklib: select() error");
 
         write_result = TEMP_FAILURE_RETRY(write(fd, buf, count));
         if (write_result < 0)
             ERR("mysocklib: write() error");
-    
+
         // move pointer
         buf += write_result;
         len += write_result;
         count -= write_result;
-    } 
+    } while (count > 0);
     
     return len;
 }

@@ -25,6 +25,10 @@ int TCP_IPv4_bind_socket(uint16_t port, int backlog);
 
 int TCP_IPv4_connect_socket(char *name, char *port);
 
+int UDP_IPv4_make_socket(void);
+
+int UDP_IPv4_bind_socket(uint16_t port);
+
 // returns client fd on success, or -1 if there is no connection (nonblock)
 // if serverfd is set to blocking, this function will block and -1 won't be 
 // ever returned
