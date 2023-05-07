@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +9,6 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/un.h>
 #include <unistd.h>
 
 #define ERR(source) (perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), exit(EXIT_FAILURE))
@@ -23,23 +23,38 @@ int sethandler(void (*f)(int), int sigNo)
 	return 0;
 }
 
-int make_socket(char *name, struct sockaddr_un *addr)
+int make_socket(void)
 {
-	int socketfd;
-	if ((socketfd = socket(PF_UNIX, SOCK_STREAM, 0)) < 0)
+	int sock;
+	sock = socket(PF_INET, SOCK_STREAM, 0);
+	if (sock < 0)
 		ERR("socket");
-	memset(addr, 0, sizeof(struct sockaddr_un));
-	addr->sun_family = AF_UNIX;
-	strncpy(addr->sun_path, name, sizeof(addr->sun_path) - 1);
-	return socketfd;
+	return sock;
 }
 
-int connect_socket(char *name)
+struct sockaddr_in make_address(char *address, char *port)
 {
-	struct sockaddr_un addr;
+	int ret;
+	struct sockaddr_in addr;
+	struct addrinfo *result;
+	struct addrinfo hints = {};
+	hints.ai_family = AF_INET;
+	if ((ret = getaddrinfo(address, port, &hints, &result))) {
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
+		exit(EXIT_FAILURE);
+	}
+	addr = *(struct sockaddr_in *)(result->ai_addr);
+	freeaddrinfo(result);
+	return addr;
+}
+
+int connect_socket(char *name, char *port)
+{
+	struct sockaddr_in addr;
 	int socketfd;
-	socketfd = make_socket(name, &addr);
-	if (connect(socketfd, (struct sockaddr *)&addr, SUN_LEN(&addr)) < 0) {
+	socketfd = make_socket();
+	addr = make_address(name, port);
+	if (connect(socketfd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0) {
 		if (errno != EINTR)
 			ERR("connect");
 		else {
@@ -57,11 +72,6 @@ int connect_socket(char *name)
 		}
 	}
 	return socketfd;
-}
-
-void usage(char *name)
-{
-	fprintf(stderr, "USAGE: %s socket operand1 operand2 operation \n", name);
 }
 
 ssize_t bulk_read(int fd, char *buf, size_t count)
@@ -98,10 +108,10 @@ ssize_t bulk_write(int fd, char *buf, size_t count)
 
 void prepare_request(char **argv, int32_t data[5])
 {
-	data[0] = htonl(atoi(argv[2]));
-	data[1] = htonl(atoi(argv[3]));
+	data[0] = htonl(atoi(argv[3]));
+	data[1] = htonl(atoi(argv[4]));
 	data[2] = htonl(0);
-	data[3] = htonl((int32_t)(argv[4][0]));
+	data[3] = htonl((int32_t)(argv[5][0]));
 	data[4] = htonl(1);
 }
 
@@ -113,19 +123,23 @@ void print_answer(int32_t data[5])
 		printf("Operation impossible\n");
 }
 
+void usage(char *name)
+{
+	fprintf(stderr, "USAGE: %s domain port  operand1 operand2 operation \n", name);
+}
+
 int main(int argc, char **argv)
 {
 	int fd;
 	int32_t data[5];
-	if (argc != 5) {
+	if (argc != 6) {
 		usage(argv[0]);
 		return EXIT_FAILURE;
 	}
 	if (sethandler(SIG_IGN, SIGPIPE))
 		ERR("Seting SIGPIPE:");
-	fd = connect_socket(argv[1]);
+	fd = connect_socket(argv[1], argv[2]);
 	prepare_request(argv, data);
-	/* Broken PIPE is treated as critical error here */
 	if (bulk_write(fd, (char *)data, sizeof(int32_t[5])) < 0)
 		ERR("write:");
 	if (bulk_read(fd, (char *)data, sizeof(int32_t[5])) < (int)sizeof(int32_t[5]))

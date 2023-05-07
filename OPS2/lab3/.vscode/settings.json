@@ -7,6 +7,8 @@
         "stdio.h": "c",
         "signal.h": "c",
         "in.h": "c",
-        "mysocklib.h": "c"
+        "mysocklib.h": "c",
+        "stdint.h": "c",
+        "typeinfo": "c"
     }
 }

@@ -152,53 +152,6 @@ Kolejną ważną opcją jest `SO_KEEPALIVE` dla połączenia TCP, która mówi, 
   <img src="images/so_table_ipproto.png" width="500" />
 </p>
 
-## Lokalna komunikacja między procesowa z użyciem socketów
-**Manpages:** man 7 unix
-```c
-#include <sys/socket.h>
-#include <sys/un.h>
-
-unix_socket = socket(AF_UNIX, type, 0);
-error = socketpair(AF_UNIX, type, 0, int *sv);
-```
-
-`AF_UNIX` (synonimy: `AF_LOCAL`, `AF_FILE`) to przestrzeń nazw (*socket family*) używana do wydajnej komunikacji pomiędzy proecesami na tym samym urządzeniu. Możliwe są sockety zarówno nienazwane jak i nazwane (przyczepione do jakiegoś pliku w systemie plików).
-
-Obowiązujące typy socketów w rodzinie `AF_UNIX` to:
-- `SOCK_STREAM` - strumień bajtów,
-- `SOCK_DGRAM` - datagramy, 
-  - większość implementacji UNIXA, zapewnia, że datagramy są reliable oraz, że nie będzie reorderingu datagramów
-- `SOCK_SEQPACKET` - sekwencje pakietów,
-  - zachowana kolejność,
-  - długość wiadomości jest ograniczona.
-
-#### Format adresów
-```c
-struct sockaddr_un {
-    sa_family_t sun_family;               /* AF_UNIX */
-    char        sun_path[108];            /* Pathname */
-};
-```
-`sun_family`, zawsze powinno przechowywać `AF_UNIX`. 
-`sun_path` na systemach LINUX jest rozmiaru $108$.
-
-Możliwe są 3 typy adresu `struct sockaddr_un`:
-- `pathname` - `sun_path` reprezentuje ścieżkę w systemie plików,
-  - socket nazwany,
-  - ściezka powinna być null-terminated,
-  - długość ścieżki nie może przekraczać rozmiaru `sun_path`,
-  - argument `addrlen` w funkcji `bind()`, powinien miec rozmiar równy co najmniej 
-  ```c
-  The macro offsetof() returns the offset of the field member from the start
-       of the structure type.
-  offsetof(struct sockaddr_un, sun_path)+strlenn(addr.sun_path)+1
-  ```
-  - tworzenie nowych socketów zakończy się niepowodzeniem, jesli proces nie ma permisji do zapisu w podanej ścieżce,
-- `unnamed` - jeżeli socket nie został przypisany do żadnego pliku z pomocą `bind()`, to przyjmujemy że jest nienazwany, jego rozmiar to `sizeof(sa_family_t)`
-- `abstract` - różni się od `pathname`, tym, że `sun_path[0] = '\0'`, następne bajty przechowują nazwę tego socketa (ograniczone przez wybrany *length*), nie ścieżkę,
-  - permisje nie mają żadnego znaczenia, bo nie operujemy na pliku w systemie plików,
-  - abstrakcyjny socket zniknie w momencie kiedy wszystkie otworzone referencje zostaną zamknięte.
-
 ## Bindowanie
 **Manpages:** man 3p bind
 ```c
@@ -326,3 +279,54 @@ Argument "nfds" określa zakres deskryptorów, które mają zostać zbadane. Zak
 należący do jakiegoś zbioru, jest większy niż nfds - 1, to nawet jeśli jest gotowy, `select()`, będzie go pomijał. 
 
 Uwaga: po tym jak jakiś element zostanie oznaczony jako gotowy, `select()` wyrzuci go ze zbioru.
+
+## Lokalna komunikacja między-procesowa z użyciem socketów
+**Manpages:** man 7 unix
+```c
+#include <sys/socket.h>
+#include <sys/un.h>
+
+unix_socket = socket(AF_UNIX, type, 0);
+error = socketpair(AF_UNIX, type, 0, int *sv);
+```
+
+`AF_UNIX` (synonimy: `AF_LOCAL`, `AF_FILE`) to przestrzeń nazw (*socket family*) używana do wydajnej komunikacji pomiędzy proecesami na tym samym urządzeniu. Możliwe są sockety zarówno nienazwane jak i nazwane (przyczepione do jakiegoś pliku w systemie plików).
+
+Obowiązujące typy socketów w rodzinie `AF_UNIX` to:
+- `SOCK_STREAM` - strumień bajtów,
+- `SOCK_DGRAM` - datagramy, 
+  - większość implementacji UNIXA, zapewnia, że datagramy są reliable oraz, że nie będzie reorderingu datagramów
+- `SOCK_SEQPACKET` - sekwencje pakietów,
+  - zachowana kolejność,
+  - długość wiadomości jest ograniczona.
+
+#### Format adresów
+```c
+struct sockaddr_un {
+    sa_family_t sun_family;               /* AF_UNIX */
+    char        sun_path[108];            /* Pathname */
+};
+```
+`sun_family`, zawsze powinno przechowywać `AF_UNIX`. 
+`sun_path` na systemach LINUX jest rozmiaru $108$.
+
+Możliwe są 3 typy adresu `struct sockaddr_un`:
+- `pathname` - `sun_path` reprezentuje ścieżkę w systemie plików,
+  - socket nazwany,
+  - ściezka powinna być null-terminated,
+  - długość ścieżki nie może przekraczać rozmiaru `sun_path`,
+  - argument `addrlen` w funkcji `bind()`, powinien miec rozmiar równy co najmniej 
+  ```c
+  The macro offsetof() returns the offset of the field member from the start
+       of the structure type.
+  offsetof(struct sockaddr_un, sun_path)+strlenn(addr.sun_path)+1
+  ```
+  - tworzenie nowych socketów zakończy się niepowodzeniem, jesli proces nie ma permisji do zapisu w podanej ścieżce,
+- `unnamed` - jeżeli socket nie został przypisany do żadnego pliku z pomocą `bind()`, to przyjmujemy że jest nienazwany, jego rozmiar to `sizeof(sa_family_t)`
+- `abstract` - różni się od `pathname`, tym, że `sun_path[0] = '\0'`, następne bajty przechowują nazwę tego socketa (ograniczone przez wybrany *length*), nie ścieżkę,
+  - permisje nie mają żadnego znaczenia, bo nie operujemy na pliku w systemie plików,
+  - abstrakcyjny socket zniknie w momencie kiedy wszystkie otworzone referencje zostaną zamknięte.
+
+
+## Komunikacja z użyciem TCP
+**Manpages:** man 7 tcp

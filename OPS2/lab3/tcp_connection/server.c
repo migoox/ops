@@ -20,9 +20,9 @@ volatile sig_atomic_t do_work = 1;
 
 void sigint_handler(int sig);
 void usage(char *name);
-void do_server(int serverfd_local);
+void do_server(int serverfd_local, int serverfd_tcp);
+void communicate(int clientfd);
 void calculate(int32_t data[5]);
-
 int main(int argc, char **argv)
 {
     if (argc != 3) {
@@ -45,29 +45,32 @@ int main(int argc, char **argv)
     int new_flags = fcntl(serverfd_local, F_GETFL) | O_NONBLOCK;
     fcntl(serverfd_local, F_SETFL, new_flags);
 
-    do_server(serverfd_local);
+    int serverfd_tcp = TCP_IPv4_bind_socket(atoi(argv[2]), BACKLOG);
+    // set nonblock
+    new_flags = fcntl(serverfd_tcp, F_GETFL) | O_NONBLOCK;
+    fcntl(serverfd_tcp, F_SETFL, new_flags);
 
-    if (TEMP_FAILURE_RETRY(close(serverfd_local)) < 0)
+    do_server(serverfd_local, serverfd_tcp);
+
+	if (TEMP_FAILURE_RETRY(close(serverfd_local)) < 0)
 		ERR("close");
         
 	if (unlink(argv[1]) < 0)
 		ERR("unlink");
 
+	if (TEMP_FAILURE_RETRY(close(serverfd_tcp)) < 0)
+		ERR("close");
+
     fprintf(stderr, "Server has terminated.\n");
+
     return EXIT_SUCCESS;
 }
 
-void do_server(int serverfd_local)
+void do_server(int serverfd_local, int serverfd_tcp)
 {
     // man select: Upon return, each of the file descriptor sets is modified in place to
     // indicate which file descriptors are currently "ready". Thus, if using  select()
     // within a loop, the sets must be reinitialized before each call.
-
-    const ssize_t data_size = sizeof(int32_t[5]);
-    
-    int clientfd;
-    ssize_t size;
-    int32_t data[5];
     fd_set base_rfds;
 
     // initalize teh set
@@ -75,6 +78,8 @@ void do_server(int serverfd_local)
 
     // add socket of the server to the mask
     FD_SET(serverfd_local, &base_rfds);
+    FD_SET(serverfd_tcp, &base_rfds);
+    int fdmax = (serverfd_tcp > serverfd_local ? serverfd_tcp : serverfd_local);
 
     // ignore SIGINT if pselect is not running
     sigset_t mask, oldmask;
@@ -85,25 +90,16 @@ void do_server(int serverfd_local)
     while (do_work) {
         fd_set rfds = base_rfds;
         // wait for serverfd_local being ready to read 
-        if (pselect(serverfd_local + 1, &rfds, NULL, NULL, NULL, &oldmask) > 0) {
-            // since serverfd_local is ready to read, there must be a client waiting for accept in the listen queue
-            if ((clientfd = LOCAL_add_new_client(serverfd_local)) >= 0) {
-                
-                // read from the client
-                if ((size = bulk_read(clientfd, (char *)data, data_size)) < 0)
-                    ERR("read error");    
-                
-                // calculate and give the answer
-                if (size == data_size) {
-                    calculate(data);
-                    if (bulk_write(clientfd, (char *)data, data_size) < 0)
-                        ERR("write error");
-                }
+        if (pselect(fdmax + 1, &rfds, NULL, NULL, NULL, &oldmask) > 0) {
+            int clientfd;
 
-                // close the client
-                if (TEMP_FAILURE_RETRY(close(clientfd)) < 0)
-					ERR("close");
-            }
+            if (FD_ISSET(serverfd_local, &rfds)) 
+                clientfd = add_new_client(serverfd_local);
+            else
+                clientfd = add_new_client(serverfd_tcp);
+
+            if (clientfd >= 0)
+                communicate(clientfd);
         } else {
             if (EINTR == errno)
                 continue;
@@ -112,6 +108,29 @@ void do_server(int serverfd_local)
         }
     }
     sigprocmask(SIG_UNBLOCK, &mask, NULL);
+}
+
+void communicate(int clientfd)
+{
+    const ssize_t data_size = sizeof(int32_t[5]);
+
+    ssize_t size;
+	int32_t data[5];
+                
+    // read from the client
+    if ((size = bulk_read(clientfd, (char *)data, data_size)) < 0)
+        ERR("read error");    
+    
+    // calculate and give the answer
+    if (size == data_size) {
+        calculate(data);
+        if (bulk_write(clientfd, (char *)data, data_size) < 0)
+            ERR("write error");
+    }
+
+    // close the client
+    if (TEMP_FAILURE_RETRY(close(clientfd)) < 0)
+        ERR("close");
 }
 
 void calculate(int32_t data[5])
@@ -158,4 +177,3 @@ void usage(char *name)
 {
 	fprintf(stderr, "USAGE: %s socket port\n", name);
 }
-
