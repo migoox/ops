@@ -247,9 +247,8 @@ int add_new_client(int serverfd)
 
     return clientfd;
 }
-
-// works with both - blocking and non-blocking states 
-ssize_t bulk_read(int fd, char *buf, size_t count)
+ 
+ssize_t bulk_read_always_block(int fd, char *buf, size_t count)
 {
     int read_result;
     fd_set base_rfds; 
@@ -283,8 +282,7 @@ ssize_t bulk_read(int fd, char *buf, size_t count)
     return len;
 }
 
-// works with both - blocking and non-blocking states 
-ssize_t bulk_write(int fd, char *buf, size_t count)
+ssize_t bulk_write_always_block(int fd, char *buf, size_t count)
 {
     int write_result;
     fd_set base_wfds; 
@@ -314,6 +312,39 @@ ssize_t bulk_write(int fd, char *buf, size_t count)
     return len;
 }
 
+ssize_t bulk_read(int fd, char *buf, size_t count)
+{
+	int c;
+	size_t len = 0;
+	do {
+		c = TEMP_FAILURE_RETRY(read(fd, buf, count));
+		if (c < 0)
+			return c;
+		if (0 == c)
+			return len;
+		buf += c;
+		len += c;
+		count -= c;
+	} while (count > 0);
+	return len;
+}
+
+ssize_t bulk_write(int fd, char *buf, size_t count)
+{
+	int c;
+	size_t len = 0;
+	do {
+		c = TEMP_FAILURE_RETRY(write(fd, buf, count));
+		if (c < 0)
+			return c;
+		buf += c;
+		len += c;
+		count -= c;
+	} while (count > 0);
+	return len;
+}
+
+
 int sethandler(void (*f)(int), int sig_no)
 {
     struct sigaction act;
@@ -325,4 +356,15 @@ int sethandler(void (*f)(int), int sig_no)
 		return -1;
 
 	return 0;
+}
+
+void bulk_nanosleep(int sec, int nsec)
+{
+    struct timespec req, rem;
+    req.tv_sec = sec;
+    req.tv_nsec = nsec;
+
+    while (nanosleep(&req, &rem) == -1 && EINTR == errno) {
+        req = rem;
+    }
 }

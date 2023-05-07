@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <time.h>
 
 #define ERR(source) (perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), exit(EXIT_FAILURE))
 
@@ -44,6 +45,18 @@ ssize_t bulk_read(int fd, char *buf, size_t count);
 // writes count bytes and from the buf
 ssize_t bulk_write(int fd, char *buf, size_t count);
 
+// signal-resistant reading, if the reading is interrupted
+// by the signal, it will retry reading.
+// reads maximaly count bytes and stores them in the buf
+ssize_t bulk_read_always_block(int fd, char *buf, size_t count);
+
+// signal-resistant writing, if the writing is interrupted
+// by the signal, it will retry writing.
+// writes count bytes and from the buf
+ssize_t bulk_write_always_block(int fd, char *buf, size_t count);
+
 int sethandler(void (*f)(int), int sig_no);
+
+void bulk_nanosleep(int sec, int nsec);
 
 #endif

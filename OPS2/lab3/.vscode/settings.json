@@ -10,6 +10,9 @@
         "mysocklib.h": "c",
         "stdint.h": "c",
         "typeinfo": "c",
-        "netdb.h": "c"
+        "netdb.h": "c",
+        "errno.h": "c",
+        "types.h": "c",
+        "unistd.h": "c"
     }
 }
