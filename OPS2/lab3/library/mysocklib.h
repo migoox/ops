@@ -9,7 +9,6 @@
 
 #define ERR(source) (perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), exit(EXIT_FAILURE))
 
-
 struct sockaddr_in IPv4_make_address(char *address, char *port);
 
 int LOCAL_make_socket(char* name, int type, struct sockaddr_un *addr);

@@ -13,6 +13,8 @@
         "netdb.h": "c",
         "errno.h": "c",
         "types.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "string.h": "c",
+        "fcntl.h": "c"
     }
 }
