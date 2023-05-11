@@ -9,7 +9,7 @@
 
 #define BACKLOG 3
 #define HOST_COUNT 8
-#define PACKET_SIZE 10
+#define PACKET_SIZE 128
 
 struct connection {
     int free;
@@ -21,13 +21,16 @@ struct connection {
 sig_atomic_t do_work;
 
 void usage(char *name);
+
 void sigint_hnd(int sigNo);
 
 void do_server(int serverfd);
-int create_fd_read_set(int serverfd, struct connection waiting_foraddr[HOST_COUNT], fd_set *read_set);
+
+int create_fd_read_set(int serverfd, struct connection waiting_foraddr[HOST_COUNT], struct connection connections[HOST_COUNT], fd_set *read_set);
 
 void handle_wclient(struct connection *client_con, struct connection connections[HOST_COUNT]);
-void handle_client(struct connection *client_con);
+
+void handle_client(struct connection *client_con, struct connection connections[HOST_COUNT]);
 
 int read_data(struct connection *client_con);
 
@@ -48,7 +51,7 @@ int main(int argc, char **argv)
         ERR("sethandler()");
     }
 
-    if (sethandler(sigint_hnd, SIGPIPE)) {
+    if (sethandler(sigint_hnd, SIGINT)) {
         ERR("sethandler()");
     }
 
@@ -59,6 +62,8 @@ int main(int argc, char **argv)
     if (TEMP_FAILURE_RETRY(close(serverfd))) {
         ERR("close()");
     }
+
+    fprintf(stderr, "\n[Server] Closed\n");
 
     return EXIT_SUCCESS;
 }
@@ -107,9 +112,9 @@ void do_server(int serverfd)
 
     while(do_work) {
         fd_set rfds;
-        int nfds = create_fd_read_set(serverfd, waiting_foraddr, &rfds);
+        int nfds = create_fd_read_set(serverfd, waiting_foraddr, connections, &rfds);
 
-        if (pselect(nfds + 1, &rfds, NULL, NULL, NULL, &oldmask)) {
+        if (pselect(nfds + 1, &rfds, NULL, NULL, NULL, &oldmask) > 0) {
 
             // new connection is pending
             if (FD_ISSET(serverfd, &rfds)) {
@@ -138,8 +143,13 @@ void do_server(int serverfd)
 
             // handle active clients
             for (int i = 0; i < HOST_COUNT; ++i) {
-                handle_client(&connections[i]);
+                handle_client(&connections[i], connections);
             }
+        } else {
+            if (EINTR == errno) {
+                continue;
+            }
+            ERR("pselect()");
         }
     }
 
@@ -208,7 +218,7 @@ void handle_wclient(struct connection *client_con, struct connection connections
     client_con->offset = 0;
 }
 
-void handle_client(struct connection *client_con)
+void handle_client(struct connection *client_con, struct connection connections[HOST_COUNT])
 {
     if (client_con->free) {
         return;
@@ -235,10 +245,43 @@ void handle_client(struct connection *client_con)
     client_con->offset += size;
 
     // find end
-    //char* end = strchr(client_con->buff, '$');
+    char* end = strchr(client_con->buff, '$');
+    if (end == NULL) {
+        // packet cancelling
+        if (client_con->offset == PACKET_SIZE) {
+            fprintf(stderr, "[Server] Packet has been rejected.\n");
+            client_con->offset = 0;
+        }
+        return;
+    }
+    *end = '\0';
 
-    fprintf(stderr, "[Server] Received: %c\n", client_con->buff[0]);
-    // client_con->offset = 0;
+    // Warning: the code below works only if HOST_COUNT is less than 9
+
+    uint32_t addr = client_con->buff[0] - '0';
+
+    fprintf(stderr, "[Server] Packet accepted.\n");
+    fprintf(stderr, "[Server] Requested address: %d\n", addr);
+    if (addr == HOST_COUNT + 1) {
+        // broadcast
+        for (int i = 0; i < HOST_COUNT; ++i) {
+            if (!connections[i].free) {
+                if (bulk_write_always_block(connections[i].clientfd, client_con->buff + 1, client_con->offset) < 0) {
+                    ERR("bulk_write()");
+                }
+            }
+        }
+    } else if (addr > HOST_COUNT + 1) {
+        fprintf(stderr, "[Server] Address doesn't exist.\n");
+    } else if (connections[addr].free) {
+        fprintf(stderr, "[Server] Addressee is not connected.\n");
+    } else {
+        if (bulk_write_always_block(connections[addr].clientfd, client_con->buff + 1, client_con->offset) < 0) {
+            ERR("bulk_write()");
+        }
+    }
+    memset(client_con->buff, 0, client_con->offset);
+    client_con->offset = 0;
 }
 
 int find_free_slot(struct connection connections[HOST_COUNT])
@@ -251,7 +294,8 @@ int find_free_slot(struct connection connections[HOST_COUNT])
     return -1;
 }
 
-int create_fd_read_set(int serverfd, struct connection waiting_foraddr[HOST_COUNT], fd_set *read_set)
+int create_fd_read_set(int serverfd, struct connection waiting_foraddr[HOST_COUNT],
+        struct connection connections[HOST_COUNT], fd_set *read_set)
 {
     FD_SET(serverfd, read_set);
     int nfds = serverfd;
@@ -266,6 +310,15 @@ int create_fd_read_set(int serverfd, struct connection waiting_foraddr[HOST_COUN
         }
     }
 
+    for (int i = 0; i < HOST_COUNT; ++i) {
+        if (!connections[i].free) {
+            FD_SET(connections[i].clientfd, read_set);
+
+            if (nfds < connections[i].clientfd) {
+                nfds = connections[i].clientfd;
+            }
+        }
+    }
+
     return nfds;
 }
-
