@@ -262,7 +262,7 @@ ssize_t bulk_read_always_block(int fd, char *buf, size_t count)
 
         // required for a non-blocking state, select waits until the file is ready 
         // to perform read/write without blocking
-        if (TEMP_FAILURE_RETRY(select(fd + 1, &rfds, NULL, NULL, NULL)) < 0)
+        if (select(fd + 1, &rfds, NULL, NULL, NULL) < 0)
 				ERR("mysocklib: select() error");
 
         read_result = TEMP_FAILURE_RETRY(read(fd, buf, count));
@@ -296,7 +296,7 @@ ssize_t bulk_write_always_block(int fd, char *buf, size_t count)
 
         // required for a non-blocking state, select waits until the file is ready 
         // to perform read/write without blocking
-        if (TEMP_FAILURE_RETRY(select(fd + 1, NULL, &wfds, NULL, NULL)) < 0)
+        if (select(fd + 1, NULL, &wfds, NULL, NULL) < 0)
 				ERR("mysocklib: select() error");
 
         write_result = TEMP_FAILURE_RETRY(write(fd, buf, count));
