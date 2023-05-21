@@ -6,8 +6,12 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <time.h>
+#include <stdio.h>
+#include <errno.h>
 
 #define ERR(source) (perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), exit(EXIT_FAILURE))
+
+#define HERR(source) (fprintf(stderr, "%s(%d) at %s:%d\n", source, h_errno, __FILE__, __LINE__), exit(EXIT_FAILURE))
 
 struct sockaddr_in IPv4_make_address(char *address, char *port);
 

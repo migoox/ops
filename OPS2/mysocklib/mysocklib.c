@@ -320,6 +320,7 @@ ssize_t bulk_read(int fd, char *buf, size_t count)
 		c = TEMP_FAILURE_RETRY(read(fd, buf, count));
 		if (c < 0)
 			return c;
+        // eof
 		if (0 == c)
 			return len;
 		buf += c;

@@ -199,6 +199,10 @@ kolejności będą one odblokowywane.
 ## Semafory
 W semaforach (dowolnych) nie koneceptu właściciela. Dowolny proces/wątek może sygnalizować semafor.
 
+kopia semafora nie jest semaforem!
+
+GETVALUE NIE JEST ATOMOWA
+
 Semafor zliczający, jest potrzebny gdy mamy kilka instancji danego resource. Jesli mamy jedną
 korzystamy z semafora binarnego lub mutexa.
 

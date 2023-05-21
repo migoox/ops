@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "../library/mysocklib.h"
+#include "../../mysocklib/mysocklib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
