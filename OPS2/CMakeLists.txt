@@ -19,6 +19,8 @@ add_executable(lab4.exercise1.client lab4/exercise1/client.c mysocklib/mysocklib
 # exercise 2
 add_executable(lab4.exercise2.server lab4/exercise2/server.c mysocklib/mysocklib.c mysocklib/mysocklib.h)
 
+# exercise 3
+add_executable(lab4.exercise3.server lab4/exercise3/server.c mysocklib/mysocklib.c mysocklib/mysocklib.h)
 
 add_compile_options(-Wall -fsanitize=address,undefined -ansi -pedantic)
 
