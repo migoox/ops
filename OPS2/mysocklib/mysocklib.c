@@ -105,7 +105,6 @@ struct sockaddr_in IPv4_make_address(char *address, char *port)
 		exit(EXIT_FAILURE);
 	}
 	addr = *(struct sockaddr_in *)(result->ai_addr);
-    //  printf("%s\n", inet_ntoa (addr.sin_addr));
 	freeaddrinfo(result);
 	return addr;
 }
